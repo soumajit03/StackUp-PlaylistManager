@@ -1,0 +1,17 @@
+# Node.js
+node_modules/
+.env
+.DS_Store
+dist/
+build/
+coverage/
+.vscode/
+*.log
+
+# Vite / React
+frontend/dist/
+frontend/.env
+
+# Express / Backend
+backend/node_modules/
+backend/.env
