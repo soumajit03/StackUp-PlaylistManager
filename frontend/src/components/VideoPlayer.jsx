@@ -3,14 +3,12 @@ import React from "react";
 const VideoPlayer = ({ video, onClose, onStatusChange }) => {
   if (!video) return null;
 
-  const handleMarkWatched = () => {
-    onStatusChange(video.id, "watched");
-    onClose();
-  };
+  const hasStatus = (status) => video.status?.includes(status);
 
-  const handleMarkUnwatched = () => {
-    onStatusChange(video.id, "unwatched");
-    onClose();
+  const handleToggleWatched = () => {
+    const action = hasStatus("watched") ? "remove" : "add";
+    onStatusChange(video.id, "watched", action);
+    onClose(); // optional
   };
 
   return (
@@ -21,6 +19,7 @@ const VideoPlayer = ({ video, onClose, onStatusChange }) => {
             ✕
           </button>
         </div>
+
         <iframe
           className="w-full aspect-video"
           src={`https://www.youtube.com/embed/${video.id}`}
@@ -30,20 +29,27 @@ const VideoPlayer = ({ video, onClose, onStatusChange }) => {
         ></iframe>
 
         <div className="p-4 space-y-3">
-          <h2 className="text-xl font-semibold">{video.title}</h2>
+          <div className="flex items-center gap-2">
+            {video.index && (
+              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-semibold">
+                #{video.index}
+              </span>
+            )}
+<h2 className="text-xl font-semibold">
+  #{video.index}. {video.title}
+</h2>
+          </div>
 
           <div className="flex gap-4">
             <button
-              onClick={handleMarkWatched}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+              onClick={handleToggleWatched}
+              className={`px-4 py-2 rounded-lg text-sm ${
+                hasStatus("watched")
+                  ? "bg-gray-300 text-gray-800 hover:bg-gray-400"
+                  : "bg-green-600 text-white hover:bg-green-700"
+              }`}
             >
-              Mark as Watched
-            </button>
-            <button
-              onClick={handleMarkUnwatched}
-              className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 text-sm"
-            >
-              Mark as Unwatched
+              {hasStatus("watched") ? "Mark as Unwatched" : "Mark as Watched"}
             </button>
           </div>
         </div>

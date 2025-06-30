@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   Play,
   Calendar,
@@ -6,38 +6,39 @@ import {
   RotateCcw,
   Check,
   Bookmark,
-} from 'lucide-react';
-import { formatDate } from '../utils/youtube';
+} from "lucide-react";
+import { formatDate } from "../utils/youtube";
 
-const VideoCard = ({ video, onStatusChange, onPlay }) => {
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'watched':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'practice':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'saved':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
+const VideoCard = ({ video, onStatusChange, onPlay, index }) => {
+  const hasStatus = (status) => video.status?.includes(status);
+
+  const toggleStatus = (status) => {
+    const action = hasStatus(status) ? "remove" : "add";
+    onStatusChange(video.id, status, action);
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'watched':
-        return <Check className="w-3 h-3" />;
-      case 'practice':
-        return <RotateCcw className="w-3 h-3" />;
-      case 'saved':
-        return <Bookmark className="w-3 h-3" />;
-      default:
-        return null;
-    }
-  };
+  // ✅ Filter out "unwatched" when other tags exist
+  const displayStatuses =
+    video.status?.length > 1
+      ? video.status.filter((s) => s !== "unwatched")
+      : video.status || [];
+
+  // ✅ Determine if the background should be blue (watched + any other tag)
+  const showBlueBackground =
+    hasStatus("watched") || (hasStatus("practice") || hasStatus("saved"));
 
   return (
-    <div className="flex items-start gap-4 p-3 rounded-xl bg-white shadow-sm border border-gray-100">
+    <div
+      className={`flex items-start gap-4 p-3 rounded-xl shadow-sm border border-gray-100 relative ${
+        showBlueBackground ? "bg-blue-100" : "bg-white"
+      }`}
+    >
+      {/* Video Number */}
+      <div className="absolute -left-4 top-4 w-6 h-6 bg-red-100 text-red-700 rounded-full text-xs font-semibold flex items-center justify-center shadow">
+        {index}
+      </div>
+
+      {/* Thumbnail & Overlay */}
       <div className="relative group flex-shrink-0">
         <img
           src={video.thumbnail}
@@ -47,16 +48,24 @@ const VideoCard = ({ video, onStatusChange, onPlay }) => {
         <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs font-medium">
           {video.duration}
         </div>
-        <div
-          className={`absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(
-            video.status
-          )} flex items-center space-x-1`}
-        >
-          {getStatusIcon(video.status)}
-          <span className="capitalize">{video.status}</span>
-        </div>
+
+        {displayStatuses.length > 0 && (
+          <div
+            className={`absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-medium border flex items-center space-x-1 ${
+              displayStatuses.includes("watched")
+                ? "bg-green-100 text-green-800 border-green-200"
+                : "bg-gray-100 text-gray-700 border-gray-200"
+            }`}
+          >
+            {displayStatuses.includes("watched") && <Check className="w-3 h-3" />}
+            {displayStatuses.includes("practice") && <RotateCcw className="w-3 h-3" />}
+            {displayStatuses.includes("saved") && <Bookmark className="w-3 h-3" />}
+            <span>{displayStatuses.join(", ")}</span>
+          </div>
+        )}
       </div>
 
+      {/* Info & Actions */}
       <div className="flex-1">
         <h3 className="font-semibold text-gray-900 mb-1 text-base line-clamp-2">
           {video.title}
@@ -84,32 +93,22 @@ const VideoCard = ({ video, onStatusChange, onPlay }) => {
 
           <div className="flex items-center space-x-2">
             <button
-              onClick={() =>
-                onStatusChange(
-                  video.id,
-                  video.status === 'practice' ? 'unwatched' : 'practice'
-                )
-              }
+              onClick={() => toggleStatus("practice")}
               className={`p-2 rounded-md transition-colors ${
-                video.status === 'practice'
-                  ? 'bg-orange-100 text-orange-600 hover:bg-orange-200'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                hasStatus("practice")
+                  ? "bg-orange-100 text-orange-600 hover:bg-orange-200"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
               title="Mark for practice"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
             <button
-              onClick={() =>
-                onStatusChange(
-                  video.id,
-                  video.status === 'saved' ? 'unwatched' : 'saved'
-                )
-              }
+              onClick={() => toggleStatus("saved")}
               className={`p-2 rounded-md transition-colors ${
-                video.status === 'saved'
-                  ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                hasStatus("saved")
+                  ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
               title="Save for later"
             >

@@ -8,7 +8,7 @@ const videoSchema = new mongoose.Schema({
   duration: String,
   channelTitle: String,
   publishedAt: String,
-  status: String,
+  status: [String],
   notes: String,
 });
 

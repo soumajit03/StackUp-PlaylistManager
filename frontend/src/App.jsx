@@ -19,13 +19,11 @@ const App = () => {
   const [currentVideoPage, setCurrentVideoPage] = useState(1);
   const videosPerPage = 8;
 
-  // ✅ Fetch playlists and auto-select first one if available
   useEffect(() => {
     if (user?.id) {
       axios.get(`/api/playlists/${user.id}`).then((res) => {
         const data = res.data || [];
         setPlaylists(data);
-
         if (data.length > 0 && !selectedPlaylist) {
           setSelectedPlaylist(data[0]);
         }
@@ -33,24 +31,21 @@ const App = () => {
     }
   }, [user, selectedPlaylist]);
 
-  // ✅ Reset pagination on filter/playlist change
   useEffect(() => {
     setCurrentVideoPage(1);
   }, [selectedPlaylist, filter]);
 
-  // ✅ Count videos by status
   const counts = useMemo(() => {
     const videos = selectedPlaylist?.videos || [];
     return {
       all: videos.length,
-      unwatched: videos.filter((v) => v.status === "unwatched").length,
-      watched: videos.filter((v) => v.status === "watched").length,
-      practice: videos.filter((v) => v.status === "practice").length,
-      saved: videos.filter((v) => v.status === "saved").length,
+      unwatched: videos.filter((v) => !v.status?.includes("watched")).length,
+      watched: videos.filter((v) => v.status?.includes("watched")).length,
+      practice: videos.filter((v) => v.status?.includes("practice")).length,
+      saved: videos.filter((v) => v.status?.includes("saved")).length,
     };
   }, [selectedPlaylist]);
 
-  // ✅ Save playlist to DB and UI
   const handleSavePlaylist = async (playlist) => {
     try {
       const playlistWithUser = { ...playlist, userId: user.id };
@@ -63,25 +58,32 @@ const App = () => {
       setSelectedPlaylist(res.data);
     } catch (err) {
       console.error("❌ Failed to save playlist:", err);
-      alert(
-        "Failed to save playlist: " + (err.response?.data?.error || err.message)
-      );
+      alert("Failed to save playlist: " + (err.response?.data?.error || err.message));
     }
   };
 
-  // ✅ Update video status
-  const handleStatusChange = async (videoId, status) => {
+  const handleStatusChange = async (videoId, status, action = "add") => {
     try {
       await axios.post("/api/playlists/video-status", {
         userId: user.id,
         playlistId: selectedPlaylist.playlistId,
         videoId,
         status,
+        action,
       });
 
-      const updatedVideos = selectedPlaylist.videos.map((v) =>
-        v.id === videoId ? { ...v, status } : v
-      );
+      const updatedVideos = selectedPlaylist.videos.map((v) => {
+        if (v.id !== videoId) return v;
+
+        let updatedStatus = Array.isArray(v.status) ? [...v.status] : [];
+        if (action === "add" && !updatedStatus.includes(status)) {
+          updatedStatus.push(status);
+        } else if (action === "remove") {
+          updatedStatus = updatedStatus.filter((s) => s !== status);
+        }
+
+        return { ...v, status: updatedStatus };
+      });
 
       const updatedPlaylist = {
         ...selectedPlaylist,
@@ -89,7 +91,6 @@ const App = () => {
       };
 
       setSelectedPlaylist({ ...updatedPlaylist });
-
       setPlaylists((prev) =>
         prev.map((p) =>
           p.playlistId === updatedPlaylist.playlistId ? updatedPlaylist : p
@@ -102,16 +103,19 @@ const App = () => {
 
   if (!user) return <RedirectToSignIn />;
 
-  // ✅ Filter and paginate videos
-  const filteredVideos = selectedPlaylist?.videos?.filter(
-    (v) => filter === "all" || v.status === filter
-  ) || [];
+  const filteredVideos = selectedPlaylist?.videos?.filter((v) => {
+    if (filter === "all") return true;
+    return v.status?.includes(filter);
+  }) || [];
 
   const totalVideoPages = Math.ceil(filteredVideos.length / videosPerPage);
-  const paginatedVideos = filteredVideos.slice(
-    (currentVideoPage - 1) * videosPerPage,
-    currentVideoPage * videosPerPage
-  );
+ const paginatedVideos = filteredVideos
+  .slice((currentVideoPage - 1) * videosPerPage, currentVideoPage * videosPerPage)
+  .map((video) => {
+    const globalIndex = selectedPlaylist.videos.findIndex(v => v.id === video.id);
+    return { ...video, globalIndex: globalIndex + 1 }; // +1 for 1-based display
+  });
+
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -139,22 +143,21 @@ const App = () => {
               />
               <div className="flex flex-col gap-4">
                 {paginatedVideos.map((video) => (
-                  <VideoCard
-                    key={video.id}
-                    video={video}
-                    onStatusChange={handleStatusChange}
-                    onPlay={() => setVideoToPlay(video)}
-                  />
-                ))}
+  <VideoCard
+    key={video.id}
+    index={video.globalIndex}
+    video={video}
+    onStatusChange={handleStatusChange}
+    onPlay={() => setVideoToPlay({ ...video, index: video.globalIndex })}
+  />
+))}
+
               </div>
 
-              {/* ✅ Pagination controls */}
               {totalVideoPages > 1 && (
                 <div className="flex justify-center items-center gap-6 mt-4">
                   <button
-                    onClick={() =>
-                      setCurrentVideoPage((p) => Math.max(1, p - 1))
-                    }
+                    onClick={() => setCurrentVideoPage((p) => Math.max(1, p - 1))}
                     disabled={currentVideoPage === 1}
                     className="px-4 py-2 text-sm font-medium bg-gray-200 rounded disabled:opacity-50"
                   >
@@ -165,9 +168,7 @@ const App = () => {
                   </span>
                   <button
                     onClick={() =>
-                      setCurrentVideoPage((p) =>
-                        Math.min(totalVideoPages, p + 1)
-                      )
+                      setCurrentVideoPage((p) => Math.min(totalVideoPages, p + 1))
                     }
                     disabled={currentVideoPage === totalVideoPages}
                     className="px-4 py-2 text-sm font-medium bg-gray-200 rounded disabled:opacity-50"
@@ -181,7 +182,6 @@ const App = () => {
         </main>
       </div>
 
-      {/* ✅ Video Player Modal */}
       <VideoPlayer
         video={videoToPlay}
         onClose={() => setVideoToPlay(null)}

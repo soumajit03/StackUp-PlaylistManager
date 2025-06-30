@@ -3,22 +3,19 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const axios = require("axios");
-
+const Playlist = require("./models/Playlist");
 const playlistRoutes = require("./routes/playlistRoutes");
-
 const app = express();
 
-// ✅ FIX: allow large JSON bodies (needed for long playlists)
 app.use(express.json({ limit: "10mb" }));
 app.use(cors({
   origin: process.env.CLIENT_URL,
   credentials: true,
 }));
 
-// API routes
 app.use("/api/playlists", playlistRoutes);
 
-// ✅ Optional: Proxy to YouTube playlist fetch (for hiding API key from frontend)
+// ✅ Optional: Proxy to YouTube playlist fetch
 app.get("/api/youtube/playlist", async (req, res) => {
   const { playlistId } = req.query;
   if (!playlistId) return res.status(400).json({ error: "Missing playlistId" });
@@ -49,12 +46,36 @@ app.get("/api/youtube/playlist", async (req, res) => {
   }
 });
 
-// DB + server start
+// DB + Server
 const PORT = process.env.PORT || 5000;
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
+  .then(async () => {
     console.log("✅ MongoDB connected");
+
+    // ✅ One-time fix: Convert string status → array
+    const playlists = await Playlist.find();
+    for (const playlist of playlists) {
+      let updated = false;
+
+      playlist.videos = playlist.videos.map(video => {
+        if (typeof video.status === "string") {
+          updated = true;
+          return {
+            ...video,
+            status: [video.status], // Convert to array
+          };
+        }
+        return video;
+      });
+
+      if (updated) {
+        await playlist.save();
+        console.log(`✅ Fixed playlist: ${playlist.playlistId}`);
+      }
+    }
+
+    // Start server
     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch(err => console.error("❌ DB connection error:", err));
