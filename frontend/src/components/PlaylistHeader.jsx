@@ -1,11 +1,12 @@
 import React from 'react';
 import { Users, Video } from 'lucide-react';
 
-const PlaylistHeader = ({ playlist }) => {
-  const videos = playlist?.videos || [];
-  const total = videos.length;
-  const watched = videos.filter(v => v.status === "watched").length;
-  const percent = total === 0 ? 0 : Math.round((watched / total) * 100);
+
+  const PlaylistHeader = ({ playlist }) => {
+  const total = playlist.videos?.length || 0;
+  const watched = playlist.videos?.filter(v => v.status?.includes("watched")).length || 0;
+  const percent = total > 0 ? Math.round((watched / total) * 100) : 0;
+
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">

@@ -17,13 +17,12 @@ const Sidebar = ({
 
   // ✅ Helper to calculate watched % properly
   const getCompletion = (playlist) => {
-    const total = playlist.videos?.length || 0;
-    const watched = playlist.videos?.filter((v) => v.status === "watched").length || 0;
+  const total = playlist.videos?.length || 0;
+  const watched = playlist.videos?.filter((v) => v.status?.includes("watched")).length || 0;
+  const percent = total ? Math.round((watched / total) * 100) : 0;
+  return `${percent}% Watched`;
+};
 
-    if (total === 0) return "0% Watched";
-    const percent = Math.round((watched / total) * 100);
-    return `${percent}% Watched`;
-  };
 
   return (
     <aside className="w-64 bg-white border-r p-4 space-y-4 max-h-screen overflow-y-auto">
