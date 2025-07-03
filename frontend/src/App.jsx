@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { RedirectToSignIn, useUser } from "@clerk/clerk-react";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
@@ -15,9 +15,11 @@ const App = () => {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [filter, setFilter] = useState("all");
   const [videoToPlay, setVideoToPlay] = useState(null);
-
   const [currentVideoPage, setCurrentVideoPage] = useState(1);
+  const [highlightVideoIndex, setHighlightVideoIndex] = useState(null);
   const videosPerPage = 8;
+
+  const listRef = useRef(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -33,6 +35,7 @@ const App = () => {
 
   useEffect(() => {
     setCurrentVideoPage(1);
+    setHighlightVideoIndex(null);
   }, [selectedPlaylist, filter]);
 
   const counts = useMemo(() => {
@@ -50,7 +53,6 @@ const App = () => {
     try {
       const playlistWithUser = { ...playlist, userId: user.id };
       const res = await axios.post("/api/playlists", playlistWithUser);
-
       setPlaylists((prev) => [
         ...prev.filter((p) => p.playlistId !== playlist.playlistId),
         res.data,
@@ -74,14 +76,12 @@ const App = () => {
 
       const updatedVideos = selectedPlaylist.videos.map((v) => {
         if (v.id !== videoId) return v;
-
         let updatedStatus = Array.isArray(v.status) ? [...v.status] : [];
         if (action === "add" && !updatedStatus.includes(status)) {
           updatedStatus.push(status);
         } else if (action === "remove") {
           updatedStatus = updatedStatus.filter((s) => s !== status);
         }
-
         return { ...v, status: updatedStatus };
       });
 
@@ -109,13 +109,25 @@ const App = () => {
   }) || [];
 
   const totalVideoPages = Math.ceil(filteredVideos.length / videosPerPage);
- const paginatedVideos = filteredVideos
-  .slice((currentVideoPage - 1) * videosPerPage, currentVideoPage * videosPerPage)
-  .map((video) => {
-    const globalIndex = selectedPlaylist.videos.findIndex(v => v.id === video.id);
-    return { ...video, globalIndex: globalIndex + 1 }; // +1 for 1-based display
-  });
 
+  const paginatedVideos = filteredVideos
+    .slice((currentVideoPage - 1) * videosPerPage, currentVideoPage * videosPerPage)
+    .map((video) => {
+      const globalIndex = selectedPlaylist.videos.findIndex(v => v.id === video.id);
+      return { ...video, globalIndex: globalIndex + 1 };
+    });
+
+  const handleJumpToIndex = (index) => {
+    const page = Math.ceil(index / videosPerPage);
+    setCurrentVideoPage(page);
+    setHighlightVideoIndex(index);
+    setTimeout(() => {
+      if (listRef.current) {
+        const el = listRef.current.querySelector(`#video-${index}`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 300);
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -135,23 +147,35 @@ const App = () => {
           <PlaylistInput onSave={handleSavePlaylist} />
           {selectedPlaylist && (
             <>
-              <PlaylistHeader playlist={selectedPlaylist} />
+              <PlaylistHeader
+  playlist={selectedPlaylist}
+  onJumpToVideo={(index) => {
+    const page = Math.ceil(index / videosPerPage);
+    setCurrentVideoPage(page);
+    setTimeout(() => {
+      const el = document.getElementById(`video-${index}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    setHighlightedIndex(index);
+  }}
+/>
+
               <FilterTabs
                 activeFilter={filter}
                 onFilterChange={setFilter}
                 counts={counts}
               />
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4" ref={listRef}>
                 {paginatedVideos.map((video) => (
-  <VideoCard
-    key={video.id}
-    index={video.globalIndex}
-    video={video}
-    onStatusChange={handleStatusChange}
-    onPlay={() => setVideoToPlay({ ...video, index: video.globalIndex })}
-  />
-))}
-
+                  <VideoCard
+                    key={video.id}
+                    index={video.globalIndex}
+                    video={video}
+                    highlight={video.globalIndex === highlightVideoIndex}
+                    onStatusChange={handleStatusChange}
+                    onPlay={() => setVideoToPlay({ ...video, index: video.globalIndex })}
+                  />
+                ))}
               </div>
 
               {totalVideoPages > 1 && (
@@ -167,9 +191,7 @@ const App = () => {
                     Page {currentVideoPage} of {totalVideoPages}
                   </span>
                   <button
-                    onClick={() =>
-                      setCurrentVideoPage((p) => Math.min(totalVideoPages, p + 1))
-                    }
+                    onClick={() => setCurrentVideoPage((p) => Math.min(totalVideoPages, p + 1))}
                     disabled={currentVideoPage === totalVideoPages}
                     className="px-4 py-2 text-sm font-medium bg-gray-200 rounded disabled:opacity-50"
                   >
