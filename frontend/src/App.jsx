@@ -15,11 +15,12 @@ const App = () => {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [filter, setFilter] = useState("all");
   const [videoToPlay, setVideoToPlay] = useState(null);
-  const [currentVideoPage, setCurrentVideoPage] = useState(1);
   const [highlightVideoIndex, setHighlightVideoIndex] = useState(null);
+
+  const [currentVideoPage, setCurrentVideoPage] = useState(1);
   const videosPerPage = 8;
 
-  const listRef = useRef(null);
+  const previousPlaylistId = useRef(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -33,10 +34,18 @@ const App = () => {
     }
   }, [user, selectedPlaylist]);
 
+  // ✅ Only reset page if playlistId actually changed
+  useEffect(() => {
+    if (selectedPlaylist?.playlistId !== previousPlaylistId.current) {
+      setCurrentVideoPage(1);
+      previousPlaylistId.current = selectedPlaylist?.playlistId;
+    }
+  }, [selectedPlaylist?.playlistId]);
+
+  // ✅ Reset page on filter change
   useEffect(() => {
     setCurrentVideoPage(1);
-    setHighlightVideoIndex(null);
-  }, [selectedPlaylist, filter]);
+  }, [filter]);
 
   const counts = useMemo(() => {
     const videos = selectedPlaylist?.videos || [];
@@ -53,6 +62,7 @@ const App = () => {
     try {
       const playlistWithUser = { ...playlist, userId: user.id };
       const res = await axios.post("/api/playlists", playlistWithUser);
+
       setPlaylists((prev) => [
         ...prev.filter((p) => p.playlistId !== playlist.playlistId),
         res.data,
@@ -76,12 +86,14 @@ const App = () => {
 
       const updatedVideos = selectedPlaylist.videos.map((v) => {
         if (v.id !== videoId) return v;
+
         let updatedStatus = Array.isArray(v.status) ? [...v.status] : [];
         if (action === "add" && !updatedStatus.includes(status)) {
           updatedStatus.push(status);
         } else if (action === "remove") {
           updatedStatus = updatedStatus.filter((s) => s !== status);
         }
+
         return { ...v, status: updatedStatus };
       });
 
@@ -109,25 +121,12 @@ const App = () => {
   }) || [];
 
   const totalVideoPages = Math.ceil(filteredVideos.length / videosPerPage);
-
   const paginatedVideos = filteredVideos
     .slice((currentVideoPage - 1) * videosPerPage, currentVideoPage * videosPerPage)
     .map((video) => {
       const globalIndex = selectedPlaylist.videos.findIndex(v => v.id === video.id);
       return { ...video, globalIndex: globalIndex + 1 };
     });
-
-  const handleJumpToIndex = (index) => {
-    const page = Math.ceil(index / videosPerPage);
-    setCurrentVideoPage(page);
-    setHighlightVideoIndex(index);
-    setTimeout(() => {
-      if (listRef.current) {
-        const el = listRef.current.querySelector(`#video-${index}`);
-        el?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }, 300);
-  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -148,32 +147,43 @@ const App = () => {
           {selectedPlaylist && (
             <>
               <PlaylistHeader
-  playlist={selectedPlaylist}
-  onJumpToVideo={(index) => {
-    const page = Math.ceil(index / videosPerPage);
-    setCurrentVideoPage(page);
-    setTimeout(() => {
-      const el = document.getElementById(`video-${index}`);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-    setHighlightedIndex(index);
-  }}
-/>
-
+                playlist={selectedPlaylist}
+                onJumpToVideo={(index) => {
+                  const page = Math.ceil(index / videosPerPage);
+                  setCurrentVideoPage(page);
+                  setTimeout(() => {
+                    const el = document.getElementById(`video-${index}`);
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }, 100);
+                  setHighlightVideoIndex(index);
+                }}
+                onContinue={() => {
+                  const videos = selectedPlaylist.videos;
+                  const lastWatchedIndex = [...videos].reverse().findIndex(v => v.status?.includes("watched"));
+                  const indexFromStart = lastWatchedIndex >= 0 ? videos.length - 1 - lastWatchedIndex + 1 : 1;
+                  const page = Math.ceil(indexFromStart / videosPerPage);
+                  setCurrentVideoPage(page);
+                  setHighlightVideoIndex(indexFromStart);
+                  setTimeout(() => {
+                    const el = document.getElementById(`video-${indexFromStart}`);
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }, 100);
+                }}
+              />
               <FilterTabs
                 activeFilter={filter}
                 onFilterChange={setFilter}
                 counts={counts}
               />
-              <div className="flex flex-col gap-4" ref={listRef}>
+              <div className="flex flex-col gap-4">
                 {paginatedVideos.map((video) => (
                   <VideoCard
                     key={video.id}
                     index={video.globalIndex}
                     video={video}
-                    highlight={video.globalIndex === highlightVideoIndex}
                     onStatusChange={handleStatusChange}
                     onPlay={() => setVideoToPlay({ ...video, index: video.globalIndex })}
+                    highlight={highlightVideoIndex === video.globalIndex}
                   />
                 ))}
               </div>
@@ -191,7 +201,9 @@ const App = () => {
                     Page {currentVideoPage} of {totalVideoPages}
                   </span>
                   <button
-                    onClick={() => setCurrentVideoPage((p) => Math.min(totalVideoPages, p + 1))}
+                    onClick={() =>
+                      setCurrentVideoPage((p) => Math.min(totalVideoPages, p + 1))
+                    }
                     disabled={currentVideoPage === totalVideoPages}
                     className="px-4 py-2 text-sm font-medium bg-gray-200 rounded disabled:opacity-50"
                   >

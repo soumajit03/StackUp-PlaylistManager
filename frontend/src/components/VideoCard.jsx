@@ -17,28 +17,31 @@ const VideoCard = ({ video, onStatusChange, onPlay, index, highlight }) => {
     onStatusChange(video.id, status, action);
   };
 
-  // ✅ Filter out "unwatched" when others are present
+  // ✅ Compute visible tags (hide "unwatched" if others exist)
   const displayStatuses =
     video.status?.length > 1
       ? video.status.filter((s) => s !== "unwatched")
       : video.status || [];
 
-  // ✅ Always show blue background if watched is present
-  const showBlueBackground = hasStatus("watched");
+  // ✅ Set background color if any meaningful tag exists
+  const isTagged =
+    hasStatus("watched") || hasStatus("practice") || hasStatus("saved");
+  const backgroundClass = isTagged ? "bg-blue-100" : "bg-white";
+
+  // ✅ Add highlight border if searched/jumped-to
+  const highlightClass = highlight ? "ring-2 ring-yellow-400" : "";
 
   return (
     <div
       id={`video-${index}`}
-      className={`flex items-start gap-4 p-3 rounded-xl shadow-sm border border-gray-100 relative transition ${
-        showBlueBackground ? "bg-blue-100" : "bg-white"
-      } ${highlight ? "ring-2 ring-yellow-400" : ""}`}
+      className={`flex items-start gap-4 p-3 rounded-xl shadow-sm border border-gray-100 relative ${backgroundClass} ${highlightClass}`}
     >
-      {/* Video Number */}
+      {/* Video Index Number */}
       <div className="absolute -left-4 top-4 w-6 h-6 bg-red-100 text-red-700 rounded-full text-xs font-semibold flex items-center justify-center shadow">
         {index}
       </div>
 
-      {/* Thumbnail */}
+      {/* Thumbnail + Tags */}
       <div className="relative group flex-shrink-0">
         <img
           src={video.thumbnail}
@@ -57,21 +60,15 @@ const VideoCard = ({ video, onStatusChange, onPlay, index, highlight }) => {
                 : "bg-gray-100 text-gray-700 border-gray-200"
             }`}
           >
-            {displayStatuses.includes("watched") && (
-              <Check className="w-3 h-3" />
-            )}
-            {displayStatuses.includes("practice") && (
-              <RotateCcw className="w-3 h-3" />
-            )}
-            {displayStatuses.includes("saved") && (
-              <Bookmark className="w-3 h-3" />
-            )}
+            {displayStatuses.includes("watched") && <Check className="w-3 h-3" />}
+            {displayStatuses.includes("practice") && <RotateCcw className="w-3 h-3" />}
+            {displayStatuses.includes("saved") && <Bookmark className="w-3 h-3" />}
             <span>{displayStatuses.join(", ")}</span>
           </div>
         )}
       </div>
 
-      {/* Info */}
+      {/* Title and Actions */}
       <div className="flex-1">
         <h3 className="font-semibold text-gray-900 mb-1 text-base line-clamp-2">
           {video.title}
@@ -88,7 +85,6 @@ const VideoCard = ({ video, onStatusChange, onPlay, index, highlight }) => {
           </div>
         </div>
 
-        {/* Controls */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => onPlay(video)}
