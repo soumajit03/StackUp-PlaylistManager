@@ -5,17 +5,40 @@ const cors = require("cors");
 const axios = require("axios");
 const Playlist = require("./models/Playlist");
 const playlistRoutes = require("./routes/playlistRoutes");
+
 const app = express();
 
+// Body parser
 app.use(express.json({ limit: "10mb" }));
+
+// ✅ CORS - Allow both local and deployed frontend
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "https://stackup-frontend-ten.vercel.app", // Add more if needed
+];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
 }));
 
+// ✅ Root ping route for Render health checks
+app.get("/", (req, res) => {
+  res.send("✅ Playlist Manager Backend is live.");
+});
+
+// Routes
 app.use("/api/playlists", playlistRoutes);
 
-// ✅ Optional: Proxy to YouTube playlist fetch
+// ✅ Proxy route to fetch playlist from YouTube API
 app.get("/api/youtube/playlist", async (req, res) => {
   const { playlistId } = req.query;
   if (!playlistId) return res.status(400).json({ error: "Missing playlistId" });
@@ -46,14 +69,14 @@ app.get("/api/youtube/playlist", async (req, res) => {
   }
 });
 
-// DB + Server
+// DB + Server boot
 const PORT = process.env.PORT || 5000;
 
 mongoose.connect(process.env.MONGO_URI)
   .then(async () => {
     console.log("✅ MongoDB connected");
 
-    // ✅ One-time fix: Convert string status → array
+    // One-time migration: convert old string status to array
     const playlists = await Playlist.find();
     for (const playlist of playlists) {
       let updated = false;
@@ -63,7 +86,7 @@ mongoose.connect(process.env.MONGO_URI)
           updated = true;
           return {
             ...video,
-            status: [video.status], // Convert to array
+            status: [video.status],
           };
         }
         return video;
@@ -71,11 +94,12 @@ mongoose.connect(process.env.MONGO_URI)
 
       if (updated) {
         await playlist.save();
-        console.log(`✅ Fixed playlist: ${playlist.playlistId}`);
+        console.log(`✅ Fixed status format for: ${playlist.playlistId}`);
       }
     }
 
-    // Start server
-    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
   })
   .catch(err => console.error("❌ DB connection error:", err));
