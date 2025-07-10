@@ -16,12 +16,13 @@ const App = () => {
   const [filter, setFilter] = useState("all");
   const [videoToPlay, setVideoToPlay] = useState(null);
   const [highlightVideoIndex, setHighlightVideoIndex] = useState(null);
-
   const [currentVideoPage, setCurrentVideoPage] = useState(1);
   const videosPerPage = 8;
 
   const previousPlaylistId = useRef(null);
+  const previousFilter = useRef(filter);
 
+  // Fetch playlists on mount
   useEffect(() => {
     if (user?.id) {
       axios.get(`/api/playlists/${user.id}`).then((res) => {
@@ -32,9 +33,9 @@ const App = () => {
         }
       });
     }
-  }, [user, selectedPlaylist]);
+  }, [user]);
 
-  // ✅ Only reset page if playlistId actually changed
+  // Handle page reset on playlist switch
   useEffect(() => {
     if (selectedPlaylist?.playlistId !== previousPlaylistId.current) {
       setCurrentVideoPage(1);
@@ -42,9 +43,12 @@ const App = () => {
     }
   }, [selectedPlaylist?.playlistId]);
 
-  // ✅ Reset page on filter change
+  // Handle page reset on filter change
   useEffect(() => {
-    setCurrentVideoPage(1);
+    if (filter !== previousFilter.current) {
+      setCurrentVideoPage(1);
+      previousFilter.current = filter;
+    }
   }, [filter]);
 
   const counts = useMemo(() => {
@@ -62,7 +66,6 @@ const App = () => {
     try {
       const playlistWithUser = { ...playlist, userId: user.id };
       const res = await axios.post("/api/playlists", playlistWithUser);
-
       setPlaylists((prev) => [
         ...prev.filter((p) => p.playlistId !== playlist.playlistId),
         res.data,
@@ -86,14 +89,12 @@ const App = () => {
 
       const updatedVideos = selectedPlaylist.videos.map((v) => {
         if (v.id !== videoId) return v;
-
         let updatedStatus = Array.isArray(v.status) ? [...v.status] : [];
         if (action === "add" && !updatedStatus.includes(status)) {
           updatedStatus.push(status);
         } else if (action === "remove") {
           updatedStatus = updatedStatus.filter((s) => s !== status);
         }
-
         return { ...v, status: updatedStatus };
       });
 
@@ -151,16 +152,19 @@ const App = () => {
                 onJumpToVideo={(index) => {
                   const page = Math.ceil(index / videosPerPage);
                   setCurrentVideoPage(page);
+                  setHighlightVideoIndex(index);
                   setTimeout(() => {
                     const el = document.getElementById(`video-${index}`);
                     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
                   }, 100);
-                  setHighlightVideoIndex(index);
                 }}
                 onContinue={() => {
                   const videos = selectedPlaylist.videos;
-                  const lastWatchedIndex = [...videos].reverse().findIndex(v => v.status?.includes("watched"));
-                  const indexFromStart = lastWatchedIndex >= 0 ? videos.length - 1 - lastWatchedIndex + 1 : 1;
+                  const lastWatchedIndex = [...videos]
+                    .reverse()
+                    .findIndex((v) => v.status?.includes("watched"));
+                  const indexFromStart =
+                    lastWatchedIndex >= 0 ? videos.length - 1 - lastWatchedIndex + 1 : 1;
                   const page = Math.ceil(indexFromStart / videosPerPage);
                   setCurrentVideoPage(page);
                   setHighlightVideoIndex(indexFromStart);
