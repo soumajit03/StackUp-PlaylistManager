@@ -5,21 +5,21 @@ const cors = require("cors");
 const axios = require("axios");
 const dotenv = require("dotenv");
 
-dotenv.config();
-
 const Playlist = require("../models/Playlist");
 const playlistRoutes = require("../routes/playlistRoutes");
 
+dotenv.config();
+
 const app = express();
 
+// ✅ CORS Setup
 const allowedOrigins = [
   process.env.CLIENT_URL,
   "http://localhost:5173",
-  "https://stackup-frontend-ten.vercel.app",
+  "https://stackup-frontend-ten.vercel.app"
 ];
 
 app.use(express.json({ limit: "10mb" }));
-
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -33,16 +33,16 @@ app.use(
   })
 );
 
-// ✅ This will show at https://stackup-backend-kappa.vercel.app/api/
+// ✅ Test route to verify Vercel function is working
 app.get("/", (req, res) => {
   res.send("✅ Playlist Manager Backend is Live via Vercel Function");
 });
 
-// ✅ Routes like /api/playlists
-app.use("/playlists", playlistRoutes);
+// ✅ All Playlist routes
+app.use("/api/playlists", playlistRoutes);
 
-// ✅ Proxy YouTube fetch: /api/youtube/playlist
-app.get("/youtube/playlist", async (req, res) => {
+// ✅ YouTube Proxy Route
+app.get("/api/youtube/playlist", async (req, res) => {
   const { playlistId } = req.query;
   if (!playlistId) return res.status(400).json({ error: "Missing playlistId" });
 
@@ -72,11 +72,10 @@ app.get("/youtube/playlist", async (req, res) => {
   }
 });
 
-// ✅ Connect to Mongo
-mongoose
-  .connect(process.env.MONGO_URI)
+// ✅ Connect to MongoDB once (outside the function)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("❌ Mongo connection failed", err));
+  .catch((err) => console.error("❌ Mongo connection failed:", err));
 
-// ✅ Export serverless function
+// ✅ Export for Vercel Serverless
 module.exports = serverless(app);
