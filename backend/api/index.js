@@ -12,7 +12,6 @@ const playlistRoutes = require("../routes/playlistRoutes");
 
 const app = express();
 
-// ✅ CORS origins
 const allowedOrigins = [
   process.env.CLIENT_URL,
   "http://localhost:5173",
@@ -34,16 +33,16 @@ app.use(
   })
 );
 
-// ✅ Root route
+// ✅ This will show at https://stackup-backend-kappa.vercel.app/api/
 app.get("/", (req, res) => {
   res.send("✅ Playlist Manager Backend is Live via Vercel Function");
 });
 
-// ✅ Playlist routes
-app.use("/api/playlists", playlistRoutes);
+// ✅ Routes like /api/playlists
+app.use("/playlists", playlistRoutes);
 
-// ✅ YouTube API proxy
-app.get("/api/youtube/playlist", async (req, res) => {
+// ✅ Proxy YouTube fetch: /api/youtube/playlist
+app.get("/youtube/playlist", async (req, res) => {
   const { playlistId } = req.query;
   if (!playlistId) return res.status(400).json({ error: "Missing playlistId" });
 
@@ -52,18 +51,15 @@ app.get("/api/youtube/playlist", async (req, res) => {
     let nextPageToken = undefined;
 
     do {
-      const ytRes = await axios.get(
-        "https://www.googleapis.com/youtube/v3/playlistItems",
-        {
-          params: {
-            part: "snippet",
-            maxResults: 50,
-            playlistId,
-            key: process.env.YOUTUBE_API_KEY,
-            pageToken: nextPageToken,
-          },
-        }
-      );
+      const ytRes = await axios.get("https://www.googleapis.com/youtube/v3/playlistItems", {
+        params: {
+          part: "snippet",
+          maxResults: 50,
+          playlistId,
+          key: process.env.YOUTUBE_API_KEY,
+          pageToken: nextPageToken,
+        },
+      });
 
       items = items.concat(ytRes.data.items);
       nextPageToken = ytRes.data.nextPageToken;
@@ -72,30 +68,15 @@ app.get("/api/youtube/playlist", async (req, res) => {
     res.json({ items });
   } catch (err) {
     console.error("YouTube API Error:", err.response?.data || err.message);
-    res
-      .status(500)
-      .json({ error: err.response?.data?.error?.message || err.message });
+    res.status(500).json({ error: err.response?.data?.error?.message || err.message });
   }
 });
 
-// ✅ Connect to MongoDB only once
-let isConnected = false;
+// ✅ Connect to Mongo
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => console.error("❌ Mongo connection failed", err));
 
-const connectToDatabase = async () => {
-  if (isConnected) return;
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    isConnected = true;
-    console.log("✅ MongoDB connected");
-  } catch (err) {
-    console.error("❌ MongoDB connection failed:", err.message);
-  }
-};
-
-// ✅ Wrap serverless handler
-const handler = async (req, res) => {
-  await connectToDatabase();
-  return serverless(app)(req, res);
-};
-
-module.exports = handler;
+// ✅ Export serverless function
+module.exports = serverless(app);
