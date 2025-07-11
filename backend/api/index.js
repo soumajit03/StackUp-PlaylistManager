@@ -12,6 +12,7 @@ const playlistRoutes = require("../routes/playlistRoutes");
 
 const app = express();
 
+// ✅ CORS origins
 const allowedOrigins = [
   process.env.CLIENT_URL,
   "http://localhost:5173",
@@ -33,13 +34,15 @@ app.use(
   })
 );
 
-// Routes
+// ✅ Root route
 app.get("/", (req, res) => {
   res.send("✅ Playlist Manager Backend is Live via Vercel Function");
 });
+
+// ✅ Playlist routes
 app.use("/api/playlists", playlistRoutes);
 
-// Proxy YouTube fetch route
+// ✅ YouTube API proxy
 app.get("/api/youtube/playlist", async (req, res) => {
   const { playlistId } = req.query;
   if (!playlistId) return res.status(400).json({ error: "Missing playlistId" });
@@ -75,11 +78,24 @@ app.get("/api/youtube/playlist", async (req, res) => {
   }
 });
 
-// DB connection outside handler
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("❌ Mongo connection failed", err));
+// ✅ Connect to MongoDB only once
+let isConnected = false;
 
-// Export handler
-module.exports = serverless(app);
+const connectToDatabase = async () => {
+  if (isConnected) return;
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    isConnected = true;
+    console.log("✅ MongoDB connected");
+  } catch (err) {
+    console.error("❌ MongoDB connection failed:", err.message);
+  }
+};
+
+// ✅ Wrap serverless handler
+const handler = async (req, res) => {
+  await connectToDatabase();
+  return serverless(app)(req, res);
+};
+
+module.exports = handler;
