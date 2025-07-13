@@ -44,9 +44,12 @@ const VideoCard = ({ video, onStatusChange, onPlay, index, highlight }) => {
       {/* Thumbnail + Tags */}
       <div className="relative group flex-shrink-0">
         <img
-          src={video.thumbnail}
+          src={video.thumbnail || '/default-thumbnail.jpg'}
           alt={video.title}
           className="w-40 h-24 object-cover rounded-md"
+          onError={(e) => {
+            e.target.src = '/default-thumbnail.jpg';
+          }}
         />
         <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs font-medium">
           {video.duration}
@@ -78,7 +81,7 @@ const VideoCard = ({ video, onStatusChange, onPlay, index, highlight }) => {
         </p>
 
         <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
-          <span className="font-medium text-xs">{video.channelTitle}</span>
+          <span className="font-medium text-xs">{video.channelTitle || 'Unknown Channel'}</span>
           <div className="flex items-center space-x-1 text-xs">
             <Calendar className="w-4 h-4" />
             <span>{formatDate(video.publishedAt)}</span>

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "../api";
 import { useUser } from "@clerk/clerk-react";
+import { formatDuration } from "../utils/youtube";
 
 const PlaylistInput = ({ onSave }) => {
   const { user } = useUser();
@@ -30,31 +31,72 @@ const PlaylistInput = ({ onSave }) => {
       });
 
       const items = res.data.items;
+      const meta = res.data.playlistMeta || {};
       if (!items || items.length === 0) {
         throw new Error("No videos found or invalid playlist");
       }
 
       console.log("Fetched items from YouTube:", items);
 
-      const videos = items.map((item) => ({
-        id: item.snippet.resourceId.videoId,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        thumbnail: item.snippet.thumbnails.medium.url,
-        channelTitle: item.snippet.videoOwnerChannelTitle,
-        publishedAt: item.snippet.publishedAt,
-        status: "unwatched",
-        notes: "",
-      }));
+      const videos = items.map((item) => {
+        // Changed: Ensure proper channel title fallback for each video
+        const channelTitle =
+          item.snippet.videoOwnerChannelTitle ||
+          item.snippet.channelTitle ||
+          "No Channel Found";
+        // Changed: Use only the video's own thumbnails
+        const thumbnails = item.snippet.thumbnails || {};
+        const thumbnail =
+          thumbnails.maxres?.url ||
+          thumbnails.standard?.url ||
+          thumbnails.high?.url ||
+          thumbnails.medium?.url ||
+          thumbnails.default?.url ||
+          "/default-thumbnail.jpg";
+
+        return {
+          id: item.snippet.resourceId.videoId,
+          title: item.snippet.title,
+          description: item.snippet.description,
+          thumbnail,
+          channelTitle,
+          publishedAt: item.snippet.publishedAt,
+          duration: formatDuration(item.snippet.duration),
+          status: "unwatched",
+          notes: "",
+        };
+      });
+
+      // Changed: Correctly determine playlist thumbnail and channel title for the main playlist header
+      const playlistMetaThumbnails = meta.thumbnails || {};
+      const firstVideoThumbnails = items[0]?.snippet?.thumbnails || {};
+      const playlistThumbnail =
+        playlistMetaThumbnails.maxres?.url ||
+        playlistMetaThumbnails.standard?.url ||
+        playlistMetaThumbnails.high?.url ||
+        playlistMetaThumbnails.medium?.url ||
+        playlistMetaThumbnails.default?.url ||
+        firstVideoThumbnails.maxres?.url ||
+        firstVideoThumbnails.standard?.url ||
+        firstVideoThumbnails.high?.url ||
+        firstVideoThumbnails.medium?.url ||
+        firstVideoThumbnails.default?.url ||
+        "/default-thumbnail.jpg";
+
+      const playlistChannelTitle =
+        meta.channelTitle ||
+        items[0]?.snippet?.videoOwnerChannelTitle ||
+        items[0]?.snippet?.channelTitle ||
+        "No Channel Found";
 
       const playlist = {
         userId: user.id,
         playlistId,
-        title: items[0]?.snippet?.title || "Untitled",
-        description: "",
-        thumbnail: items[0]?.snippet?.thumbnails?.medium?.url || "",
-        channelTitle: items[0]?.snippet?.videoOwnerChannelTitle || "",
-        videoCount: videos.length,
+        title: meta.title || items[0]?.snippet?.title || "Untitled",
+        description: meta.description || "",
+        thumbnail: playlistThumbnail,
+        channelTitle: playlistChannelTitle,
+        videoCount: items.length,
         videos,
       };
 
@@ -64,7 +106,18 @@ const PlaylistInput = ({ onSave }) => {
       setUrl("");
     } catch (err) {
       console.error("Failed to import playlist:", err);
-      alert("Failed to import playlist: " + (err.response?.data?.error || err.message));
+
+      // ✅ Handle specific error cases
+      if (err.response?.status === 413) {
+        alert(
+          "Playlist is too large to import. Try importing a smaller playlist or contact support."
+        );
+      } else {
+        alert(
+          "Failed to import playlist: " +
+            (err.response?.data?.error || err.message)
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -91,4 +144,4 @@ const PlaylistInput = ({ onSave }) => {
 };
 
 export default PlaylistInput;
-    
+

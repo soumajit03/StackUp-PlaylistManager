@@ -1,81 +1,135 @@
-const serverless = require("serverless-http");
-const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
-const axios = require("axios");
-const dotenv = require("dotenv");
-
-const Playlist = require("../models/Playlist");
-const playlistRoutes = require("../routes/playlistRoutes");
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import axios from 'axios';
+import playlistRoutes from '../routes/playlistRoutes.js';
 
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-// ✅ CORS Setup
-const allowedOrigins = [
-  process.env.CLIENT_URL,
-  "http://localhost:5173",
-  "https://stackup-frontend-ten.vercel.app"
-];
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/stackup')
+.then(() => console.log('✅ MongoDB connected'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
-app.use(express.json({ limit: "10mb" }));
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
+// Middleware
+app.use(cors({
+  origin: 'http://localhost:5173', // Your frontend URL
+  credentials: true
+}));
 
-// ✅ Test route to verify Vercel function is working
-app.get("/", (req, res) => {
-  res.send("✅ Playlist Manager Backend is Live via Vercel Function");
-});
+// ✅ Increase body size limits for large playlists
+app.use(express.json({ 
+  limit: '10mb' // Increase from default 1mb to 10mb
+}));
+app.use(express.urlencoded({ 
+  limit: '10mb', 
+  extended: true 
+}));
 
-// ✅ All Playlist routes
-app.use("/api/playlists", playlistRoutes);
-
-// ✅ YouTube Proxy Route
-app.get("/api/youtube/playlist", async (req, res) => {
-  const { playlistId } = req.query;
-  if (!playlistId) return res.status(400).json({ error: "Missing playlistId" });
-
+// YouTube API route
+app.get('/api/youtube/playlist', async (req, res) => {
   try {
-    let items = [];
-    let nextPageToken = undefined;
+    const { playlistId } = req.query;
+    if (!playlistId) {
+      return res.status(400).json({ error: 'Playlist ID is required' });
+    }
 
-    do {
-      const ytRes = await axios.get("https://www.googleapis.com/youtube/v3/playlistItems", {
-        params: {
-          part: "snippet",
-          maxResults: 50,
-          playlistId,
-          key: process.env.YOUTUBE_API_KEY,
-          pageToken: nextPageToken,
-        },
+    const API_KEY = process.env.YOUTUBE_API_KEY;
+    if (!API_KEY) {
+      return res.status(500).json({ error: 'YouTube API key not configured' });
+    }
+
+    // Fetch playlist metadata (title, description, thumbnail, channelTitle)
+    const playlistMetaRes = await axios.get('https://www.googleapis.com/youtube/v3/playlists', {
+      params: {
+        part: 'snippet',
+        id: playlistId,
+        key: API_KEY
+      }
+    });
+    const playlistMeta = playlistMetaRes.data.items?.[0]?.snippet || {};
+
+    // Get playlist items (videos)
+    const playlistResponse = await axios.get(`https://www.googleapis.com/youtube/v3/playlistItems`, {
+      params: {
+        part: 'snippet',
+        playlistId: playlistId,
+        maxResults: 50,
+        key: API_KEY
+      }
+    });
+
+    const playlistItems = playlistResponse.data.items;
+    if (!playlistItems || playlistItems.length === 0) {
+      return res.json({
+        ...playlistResponse.data,
+        playlistMeta,
+        items: []
       });
+    }
 
-      items = items.concat(ytRes.data.items);
-      nextPageToken = ytRes.data.nextPageToken;
-    } while (nextPageToken);
+    // Extract video IDs
+    const videoIds = playlistItems
+      .map(item => item.snippet.resourceId?.videoId)
+      .filter(Boolean)
+      .join(',');
 
-    res.json({ items });
-  } catch (err) {
-    console.error("YouTube API Error:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data?.error?.message || err.message });
+    // Get detailed video information including thumbnails and channel data
+    const videosResponse = await axios.get(`https://www.googleapis.com/youtube/v3/videos`, {
+      params: {
+        part: 'snippet,contentDetails',
+        id: videoIds,
+        key: API_KEY
+      }
+    });
+
+    const videoDetails = videosResponse.data.items;
+
+    // Combine playlist items with video details
+    const enrichedItems = playlistItems.map(playlistItem => {
+      const videoId = playlistItem.snippet.resourceId?.videoId;
+      const videoDetail = videoDetails.find(v => v.id === videoId);
+
+      return {
+        ...playlistItem,
+        snippet: {
+          ...playlistItem.snippet,
+          // Override with detailed video data if available
+          thumbnails: videoDetail?.snippet?.thumbnails || playlistItem.snippet.thumbnails,
+          channelTitle: videoDetail?.snippet?.channelTitle || playlistItem.snippet.channelTitle,
+          videoOwnerChannelTitle: videoDetail?.snippet?.channelTitle || playlistItem.snippet.videoOwnerChannelTitle,
+          // Add duration from video details
+          duration: videoDetail?.contentDetails?.duration
+        }
+      };
+    });
+
+    // Attach playlist metadata to response for frontend use
+    res.json({
+      ...playlistResponse.data,
+      playlistMeta,
+      items: enrichedItems
+    });
+
+  } catch (error) {
+    console.error('YouTube API error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch playlist from YouTube',
+      details: error.response?.data?.error?.message || error.message
+    });
   }
 });
 
-// ✅ Connect to MongoDB once (outside the function)
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("❌ Mongo connection failed:", err));
+// Routes
+app.use('/api/playlists', playlistRoutes);
 
-// ✅ Export for Vercel Serverless
-module.exports = serverless(app);
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
+});
+
+export default app;

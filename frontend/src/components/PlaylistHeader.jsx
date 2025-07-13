@@ -37,9 +37,12 @@ const PlaylistHeader = ({ playlist, onJumpToVideo }) => {
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
       <div className="flex items-start space-x-6">
         <img
-          src={playlist.thumbnail}
+          src={playlist.thumbnail || '/default-thumbnail.jpg'}
           alt={playlist.title}
           className="w-32 h-24 object-cover rounded-lg flex-shrink-0"
+          onError={(e) => {
+            e.target.src = '/default-thumbnail.jpg';
+          }}
         />
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
@@ -51,7 +54,7 @@ const PlaylistHeader = ({ playlist, onJumpToVideo }) => {
           <div className="flex items-center space-x-6 text-sm text-gray-500 mb-3">
             <div className="flex items-center space-x-1">
               <Users className="w-4 h-4" />
-              <span>{playlist.channelTitle}</span>
+              <span>{playlist.channelTitle || 'Unknown Channel'}</span>
             </div>
             <div className="flex items-center space-x-1">
               <Video className="w-4 h-4" />

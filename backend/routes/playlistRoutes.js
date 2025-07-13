@@ -1,6 +1,7 @@
-const express = require("express");
+import express from "express";
+import Playlist from "../models/Playlist.js";
+
 const router = express.Router();
-const Playlist = require("../models/Playlist");
 
 // Save or update playlist
 router.post("/", async (req, res) => {
@@ -104,4 +105,4 @@ router.delete("/:userId/:playlistId", async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
